@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Afrika – Länder lernen</title>
+<style>
+:root{font-family:Arial,Helvetica,sans-serif;color:#17212b;background:#f5f7f8}
+body{margin:0;padding:22px}
+main{max-width:1100px;margin:auto}
+h1{font-size:1.7rem;margin:0 0 8px}
+.intro{margin:0 0 18px;color:#43515d}
+.layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,.8fr);gap:18px;align-items:start}
+.panel{background:white;border:1px solid #d8e0e5;border-radius:14px;padding:16px;box-shadow:0 2px 8px #14212b0b}
+#map{width:100%;height:auto;display:block;background:#eef4f6;border-radius:10px}
+.country{fill:#dce7e9;stroke:#fff;stroke-width:.8;cursor:pointer;transition:fill .12s}
+.country:hover{fill:#a9c7d0}
+.country.selected{fill:#f4c66a;stroke:#7e5b17;stroke-width:1.6}
+.country.done{fill:#9bc9a8}
+.country.wrong{fill:#e6a09a}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+input{font-size:1rem;padding:11px;border:1px solid #aab8c1;border-radius:8px;width:100%;box-sizing:border-box}
+button{border:0;border-radius:8px;padding:10px 14px;font-size:.96rem;cursor:pointer;background:#174f67;color:white}
+button.secondary{background:#e8eef1;color:#18313d}
+button:disabled{opacity:.45;cursor:not-allowed}
+#feedback{min-height:52px;margin-top:12px;padding:10px;border-radius:8px;background:#f1f4f5;line-height:1.45}
+.good{background:#e7f5ea!important;color:#185b2b}
+.bad{background:#fff0ee!important;color:#8b241b}
+.muted{color:#65737c;font-size:.9rem}
+.stat{font-weight:bold;font-size:1.1rem;margin:8px 0 14px}
+#current{font-size:1.08rem;font-weight:bold;margin:4px 0 12px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:.85rem;color:#52616a;margin-top:10px}
+.dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+#loading{padding:30px;text-align:center}
+@media(max-width:760px){body{padding:12px}.layout{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<h1>Afrika – Wie gut kennst du die Länder?</h1>
+<p class="intro">Klicke auf ein Land auf der Karte. Trage den Ländernamen ein und kontrolliere deine Antwort sofort.</p>
+<div class="layout">
+<section class="panel">
+<div id="loading">Die Karte wird geladen … (Internetverbindung erforderlich)</div>
+<svg id="map" viewBox="0 0 760 760" role="img" aria-label="Karte Afrikas mit Ländergrenzen ohne Ländernamen" style="display:none"></svg>
+<div class="legend">
+<span><i class="dot" style="background:#dce7e9"></i>Noch offen</span>
+<span><i class="dot" style="background:#f4c66a"></i>Ausgewählt</span>
+<span><i class="dot" style="background:#9bc9a8"></i>Korrekt</span>
+</div>
+</section>
+<aside class="panel">
+<div class="stat" id="progress">0 von 54 Ländern korrekt</div>
+<div id="current">Wähle ein Land auf der Karte aus.</div>
+<label for="answer">Wie heisst dieses Land?</label>
+<input id="answer" type="text" autocomplete="off" placeholder="Ländernamen eingeben" disabled>
+<div class="controls">
+<button id="check" disabled>Überprüfen</button>
+<button id="next" class="secondary" disabled>Nächstes offenes Land</button>
+<button id="reset" class="secondary">Neu starten</button>
+</div>
+<div id="feedback" aria-live="polite">Tipp: Du kannst ein Land direkt auf der Karte anklicken.</div>
+<p class="muted">Umlaute und gängige deutsche Schreibweisen werden berücksichtigt. Bei einer falschen Antwort wird die richtige Lösung angezeigt.</p>
+</aside>
+</div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const names = {
+"Algeria":"Algerien","Angola":"Angola","Benin":"Benin","Botswana":"Botswana",
+"Burkina Faso":"Burkina Faso","Burundi":"Burundi","Cabo Verde":"Kap Verde","Cameroon":"Kamerun",
+"Central African Republic":"Zentralafrikanische Republik","Chad":"Tschad","Comoros":"Komoren",
+"Democratic Republic of the Congo":"Demokratische Republik Kongo","Republic of the Congo":"Republik Kongo",
+"Democratic Republic of the Congo":"Demokratische Republik Kongo","Djibouti":"Dschibuti","Egypt":"Ägypten",
+"Equatorial Guinea":"Äquatorialguinea","Eritrea":"Eritrea","Eswatini":"Eswatini","Ethiopia":"Äthiopien",
+"Gabon":"Gabun","Gambia":"Gambia","Ghana":"Ghana","Guinea":"Guinea","Guinea-Bissau":"Guinea-Bissau",
+"Ivory Coast":"Elfenbeinküste","Kenya":"Kenia","Lesotho":"Lesotho","Liberia":"Liberia","Libya":"Libyen",
+"Madagascar":"Madagaskar","Malawi":"Malawi","Mali":"Mali","Mauritania":"Mauretanien","Mauritius":"Mauritius",
+"Morocco":"Marokko","Mozambique":"Mosambik","Namibia":"Namibia","Niger":"Niger","Nigeria":"Nigeria",
+"Rwanda":"Ruanda","Sao Tome and Principe":"São Tomé und Príncipe","Senegal":"Senegal","Seychelles":"Seychellen",
+"Sierra Leone":"Sierra Leone","Somalia":"Somalia","South Africa":"Südafrika","South Sudan":"Südsudan",
+"Sudan":"Sudan","Tanzania":"Tansania","Togo":"Togo","Tunisia":"Tunesien","Uganda":"Uganda",
+"Zambia":"Sambia","Zimbabwe":"Simbabwe","Western Sahara":"Westsahara"
+};
+const aliases = {
+"kap verde":"Kap Verde","cabo verde":"Kap Verde","elfenbeinküste":"Elfenbeinküste","ivory coast":"Elfenbeinküste",
+"demokratische republik kongo":"Demokratische Republik Kongo","dr kongo":"Demokratische Republik Kongo",
+"kongo demokratische republik":"Demokratische Republik Kongo","republik kongo":"Republik Kongo",
+"kongo":"Republik Kongo","sao tome und principe":"São Tomé und Príncipe","são tomé und príncipe":"São Tomé und Príncipe",
+"zentralafrika":"Zentralafrikanische Republik","swasiland":"Eswatini","westsahara":"Westsahara"
+};
+const normalize = s => s.toLocaleLowerCase("de").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[’']/g,"").replace(/[-–]/g," ").replace(/\s+/g," ").trim();
+const africa = new Set(Object.keys(names));
+let features=[], selected=null, done=new Set(), attempted=new Set();
+const svg=d3.select("#map"), W=760,H=760;
+const projection=d3.geoMercator().center([20,0]).scale(310).translate([W/2,H/2+5]);
+const path=d3.geoPath(projection);
+function update(){
+ document.getElementById("progress").textContent=`${done.size} von ${features.length} Ländern korrekt`;
+ document.getElementById("next").disabled=done.size===features.length;
+}
+function selectFeature(f){
+ selected=f;
+ svg.selectAll(".country").classed("selected",d=>d===f);
+ document.getElementById("current").textContent="Land ausgewählt";
+ document.getElementById("answer").value="";
+ document.getElementById("answer").disabled=done.has(f.properties.name);
+ document.getElementById("check").disabled=done.has(f.properties.name);
+ document.getElementById("answer").focus();
+ const fb=document.getElementById("feedback");
+ fb.className="";
+ fb.textContent=done.has(f.properties.name)?"Dieses Land hast du bereits richtig gelöst. Wähle ein anderes Land.":"Gib den Ländernamen ein und klicke auf «Überprüfen».";
+}
+function check(){
+ if(!selected)return;
+ const raw=document.getElementById("answer").value;
+ const expected=names[selected.properties.name];
+ const val=normalize(raw);
+ const accepted=[expected,selected.properties.name,...Object.entries(aliases).filter(([k,v])=>v===expected).map(([k])=>k)].map(normalize);
+ const fb=document.getElementById("feedback");
+ attempted.add(selected.properties.name);
+ if(accepted.includes(val)){
+  done.add(selected.properties.name);
+  svg.selectAll(".country").classed("done",d=>done.has(d.properties.name));
+  fb.className="good";fb.textContent="✓ Korrekt! Das ist "+expected+".";
+  document.getElementById("answer").disabled=true;document.getElementById("check").disabled=true;
+ }else{
+  fb.className="bad";fb.textContent="✗ Nicht ganz. Die richtige Lösung lautet: "+expected+".";
+ }
+ update();
+}
+function nextOpen(){
+ const remaining=features.filter(f=>!done.has(f.properties.name));
+ if(remaining.length)selectFeature(remaining[Math.floor(Math.random()*remaining.length)]);
+ else {document.getElementById("current").textContent="Geschafft!";document.getElementById("feedback").textContent="Du hast alle Länder richtig benannt. Super!";}
+}
+document.getElementById("check").addEventListener("click",check);
+document.getElementById("answer").addEventListener("keydown",e=>{if(e.key==="Enter")check()});
+document.getElementById("next").addEventListener("click",nextOpen);
+document.getElementById("reset").addEventListener("click",()=>{
+ done.clear();attempted.clear();selected=null;
+ svg.selectAll(".country").classed("done",false).classed("selected",false);
+ document.getElementById("current").textContent="Wähle ein Land auf der Karte aus.";
+ document.getElementById("answer").value="";document.getElementById("answer").disabled=true;
+ document.getElementById("check").disabled=true;document.getElementById("feedback").className="";
+ document.getElementById("feedback").textContent="Tipp: Du kannst ein Land direkt auf der Karte anklicken.";update();
+});
+fetch("https://raw.githubusercontent.com/datasets/geo-countries/main/data/countries.geojson")
+.then(r=>{if(!r.ok)throw new Error("Kartendaten konnten nicht geladen werden.");return r.json()})
+.then(data=>{
+ features=data.features.filter(f=>africa.has(f.properties.name));
+ // Some data releases use an alternate Congo name; retain only countries in the curated list.
+ document.getElementById("loading").style.display="none";
+ document.getElementById("map").style.display="block";
+ svg.append("rect").attr("width",W).attr("height",H).attr("fill","#eef4f6");
+ svg.selectAll("path.country").data(features).join("path")
+  .attr("class","country").attr("d",path)
+  .attr("aria-label",d=>names[d.properties.name]||d.properties.name)
+  .on("click",(event,d)=>selectFeature(d))
+  .append("title").text("Land auswählen");
+ update();
+})
+.catch(err=>{document.getElementById("loading").textContent=err.message+" Bitte lade die Datei mit Internetverbindung erneut.";});
+</script>
+</body>
+</html>
