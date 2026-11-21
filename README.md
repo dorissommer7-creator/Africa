@@ -1,2 +1,2 @@
 # Africa
-Länderwuiz Afrika
+Länderquiz Afrika
